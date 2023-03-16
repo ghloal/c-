@@ -41,7 +41,7 @@ int Reactor::Read_buf( int fd){
             if( (errno == EAGAIN) || (errno == EWOULDBLOCK)){
                 //数据已经读完
                 std::cout << "read success" << std::endl;
-                write( fd, r_buf.c_str(), r_buf.size());                
+                //write( fd, r_buf.c_str(), r_buf.size());                
                 break;
             }
             else if(errno == EINTR){
@@ -65,4 +65,8 @@ int Reactor::Read_buf( int fd){
 //提供私有成员访问接口
 int Reactor::Getfd(){
     return sockfd;
+}
+
+std::string Reactor::Getbuf(){
+    return r_buf;
 }

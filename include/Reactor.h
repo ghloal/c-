@@ -21,6 +21,7 @@ public:
     ~Reactor();
     int Read_buf(int fd);
     int Getfd();
+    std::string Getbuf();
 };
 
 

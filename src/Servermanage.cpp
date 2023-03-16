@@ -6,12 +6,14 @@
 #include <iostream>
 #include <fcntl.h>
 #include <sys/epoll.h>
+#include <signal.h>
 #include "Epoll.h"
 #include "InetAddress.h"
 #include "ThreadPool.h"
 #include "Reactor.h"
 
 #define READ_BUFFER 1024
+//#define key_PATH1 "/dev/input/event1"
 //using namespace std;
 
 Servermanage::Servermanage():ep(nullptr), quit( false), threadpool(nullptr), connects(0), channel(nullptr){
@@ -21,44 +23,36 @@ Servermanage::Servermanage():ep(nullptr), quit( false), threadpool(nullptr), con
         this->newconnect();
     };
     //std::bind(&Servermanage::newconnect, this, std::placeholders::_1, std::placeholders::_2);
-//  newfd->set(sockfd, cb);
-    Channel *main_fd = new Channel(mainReactor->Getfd(), cb);
-    ep->UpdateChannel( main_fd);    
+    //newfd->set(sockfd, cb);
+    //Channel *main_fd = new Channel(mainReactor->Getfd(), cb);
+    ep->UpdateChannel( mainReactor->Getfd(), cb);    
 
     int size = std::thread::hardware_concurrency();
     threadpool = new ThreadPool(size);
     for(int i = 0; i < size; ++i){
         subReactors.push_back(new Reactor(1));
     }
+    //stdin_init();
 }
 
 Servermanage::~Servermanage(){
-    delete ep;
     delete mainReactor;
     delete threadpool;
     delete channel;
     for(int i = 0; i < subReactors.size(); ++i){
         delete subReactors[i];
     }
+    delete ep;
 }
 
 void Servermanage::loop(){
     while (!quit)
     {
-        //if(connects == 0)
-        //{
-        //    quit = true;
-        //    for(auto it = ep->chs.begin(); it != ep->chs.end(); ++it){
-        //        delete (*it);
-        //    }
-        //}//原先在epoll_wait后面，connects为0也不会运行到；
-        //现在在上面，考虑初入问题
         int nfds = ep->poll();
         for( int i = 0; i< nfds; i++){
             channel = (Channel*)ep->events[i].data.ptr;
             channel->callback(channel->events, channel->fd);
             //threadpool->add(channel->callback);
-            std::cout<< "connects:"<< connects<< std::endl;
         }
     }
 }
@@ -77,8 +71,7 @@ void Servermanage::newconnect(/*int events, int fd*/){
     std::cout<<"new client fd "<< clnt_sockfd<<"! IP: "<< inet_ntoa(clnt_addr.sin_addr)<<"Port: "<<ntohs(clnt_addr.sin_port)<<std::endl;
     std::function<void( int, int)> cb = [this](int events, int fd){this->pro_read(events, fd);};
     //std::bind(&Servermanage::pro_read, this, std::placeholders::_1, std::placeholders::_2);
-    Channel *newfd = new Channel(clnt_sockfd, cb);
-    ep->UpdateChannel( newfd);
+    ep->UpdateChannel(clnt_sockfd, cb);
 }
 
 void Servermanage::pro_read(int events, int fd){
@@ -90,9 +83,40 @@ void Servermanage::pro_read(int events, int fd){
     else if( events & EPOLLIN){
         std::function<void( int)> cb =[this](int fd){ 
             int random = fd%subReactors.size();
-            connects-=subReactors[random]->Read_buf(fd);
+            //int a =subReactors[random]->Read_buf(fd);
+            connects -= subReactors[random]->Read_buf(fd);
+            std::cout<< "connects:"<< connects<< std::endl;           
+            Unpacking(fd, subReactors[random]->Getbuf());
+            if(connects == 0){
+                pid_t pid = getpid();
+                kill(pid, SIGINT);
+            }
         };//使用lambda设置回调函数
         //std::bind(&(subReactors[random]->Read_buf), this, fd);//设置回调读函数            
         threadpool->add(cb, fd);//加入任务队列
     }
+}
+
+//void Servermanage::stdin_init( ){
+//    std::function<void(int, int )> cb = [this](int, int fd){
+//        std::cout<< 1 << std::endl; 
+//        char buf[1024];
+//        bzero(buf, sizeof(buf) );        
+//        int ret = read(fd, buf, sizeof(buf));
+//        std::cout<< ret << " "<< sizeof(buf)<< std::endl;        
+//        if( !strcmp(buf,"exit\0")){
+//            exit(-1);
+//            std::cout<< buf <<std::endl; 
+//        }
+//    };
+//    Channel *in_chl = new Channel(STDIN_FILENO, cb);
+//    ep->UpdateChannel( in_chl);
+//}
+
+void Servermanage::set_unpack( std::function< void(int, std::string)> cb = []( int fd, std::string buffer){
+    std::cout<< buffer<< std::endl;
+    write( fd, buffer.c_str(), buffer.size()); 
+    })
+{
+    Unpacking = cb;
 }

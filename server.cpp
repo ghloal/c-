@@ -16,6 +16,10 @@ using namespace std;
 
 int main() {
     Servermanage server;//改成servermanage类
+    server.set_unpack( []( int fd, std::string buffer){
+    std::cout<< buffer<< std::endl;
+    write( fd, buffer.c_str(), buffer.size()); 
+    });
     server.loop();
     
     return 0;

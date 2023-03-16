@@ -1,6 +1,6 @@
 PWD := $(shell pwd)
 client_src = $(wildcard ./src/InetAddress.cpp) client.cpp
-client = clinet
+client = client
 server_src = $(wildcard ./src/*.cpp) server.cpp
 server = server
 INC = -I $(wildcard ./include)
